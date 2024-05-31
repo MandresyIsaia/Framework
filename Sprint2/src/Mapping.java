@@ -1,33 +1,20 @@
 package utils;
 
 public class Mapping {
-    String className;
     String methodName;
-
-
-    // Getters and setters
-    public String getClassName() {
-        return className;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
+    String className;
 
     public String getMethodName() {
         return methodName;
     }
 
-    public void setMethodName(String method) {
-        this.methodName = method;
+    public String getClassName() {
+        return className;
     }
 
-    public Mapping(String className, String methodName) {
-        this.className = className;
+    public Mapping(String methodName, String className) {
         this.methodName = methodName;
-    }
-
-    public Mapping() {
+        this.className = className;
     }
 
 }
