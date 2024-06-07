@@ -1,17 +1,15 @@
 package util;
+
 import java.util.List;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URLDecoder;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.lang.reflect.*;
 import annotation.*;
 public class Util {
-    public static HashMap getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
-        //List<String> controllerNames = new ArrayList<>();
-        HashMap<String,Mapping> hm=new HashMap<>();
+    public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
+        List<String> controllerNames = new ArrayList<>();
         try {
             
             //String path = getClass().getClassLoader().getResource(packageToScan.replace('.', '/')).getPath();
@@ -26,14 +24,7 @@ public class Util {
                         String className = packageToScan + "." + file.getName().replace(".class", "");
                         Class<?> clazz = Class.forName(className);
                         if (clazz.isAnnotationPresent(annotation.asSubclass(java.lang.annotation.Annotation.class))) {
-                            //controllerNames.add(clazz.getSimpleName());
-                            Method[]methods=clazz.getDeclaredMethods();
-                            for (Method m : methods) {
-                                if (m.isAnnotationPresent(Get.class)) {
-                                    Get getAnnotation= m.getAnnotation(Get.class);
-                                    hm.put(getAnnotation.url(),new Mapping(clazz.getName(),m.getName()));
-                                }
-                            }
+                            controllerNames.add(clazz.getSimpleName());
                         }
                     }
                 }
@@ -42,11 +33,7 @@ public class Util {
         } catch (IOException | ClassNotFoundException e) {
             throw e;
         }
-        if (hm.size()<1) {
-            throw new Exception("Controller's folder not found");
-        }
-        return hm;
-        
+        return controllerNames;
     }
 
    
