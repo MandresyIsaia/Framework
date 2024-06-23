@@ -1,15 +1,17 @@
 package util;
-
 import java.util.List;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.lang.reflect.*;
 import annotation.*;
 public class Util {
-    public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
-        List<String> controllerNames = new ArrayList<>();
+    public static HashMap<String,Mapping> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
+        //List<String> controllerNames = new ArrayList<>();
+        HashMap<String,Mapping> hm=new HashMap<>();
         try {
             
             //String path = getClass().getClassLoader().getResource(packageToScan.replace('.', '/')).getPath();
@@ -24,16 +26,29 @@ public class Util {
                         String className = packageToScan + "." + file.getName().replace(".class", "");
                         Class<?> clazz = Class.forName(className);
                         if (clazz.isAnnotationPresent(annotation.asSubclass(java.lang.annotation.Annotation.class))) {
-                            controllerNames.add(clazz.getSimpleName());
+                            //controllerNames.add(clazz.getSimpleName());
+                            Method[]methods=clazz.getDeclaredMethods();
+                            for (Method m : methods) {
+                                if (m.isAnnotationPresent(Get.class)) {
+                                    Get getAnnotation= m.getAnnotation(Get.class);
+                                    for(String key:hm.keySet()){
+                                        if(getAnnotation.url().equals(key))
+                                        throw new Exception("Duplicate url : "+getAnnotation.url());
+                                    }
+                                    hm.put(getAnnotation.url(),new Mapping(clazz.getName(),m.getName()));
+                                }
+                            }
                         }
                     }
                 }
             }
            
-        } catch (IOException | ClassNotFoundException e) {
-            throw e;
+        } catch (IOException e) {
+            throw new Exception("Package introuvable");
         }
-        return controllerNames;
+       
+        return hm;
+        
     }
 
    

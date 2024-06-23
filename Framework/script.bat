@@ -1,6 +1,6 @@
 @echo off
 
-set DESTINATION_DIR=C:\Users\Mahery\Desktop\working_dir\Framework\Test
+set DESTINATION_DIR=D:\s4\Naina\Sprint5\Test
 
 REM Vérifier si le dossier lib existe dans le dossier de destination
 if not exist "%DESTINATION_DIR%\lib" (
@@ -8,7 +8,7 @@ if not exist "%DESTINATION_DIR%\lib" (
 )
 
 REM Compiler les fichiers Java
-javac -d .\classes *.java
+javac -cp ..\Test\lib\* -d .\classes *.java
 
 REM Créer le fichier JAR
 jar -cf .\framework.jar -C .\classes .
