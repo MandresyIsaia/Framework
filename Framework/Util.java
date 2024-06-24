@@ -9,12 +9,10 @@ import java.util.HashMap;
 import java.lang.reflect.*;
 import annotation.*;
 public class Util {
-    public static HashMap<String,Mapping> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
-        //List<String> controllerNames = new ArrayList<>();
-        HashMap<String,Mapping> hm=new HashMap<>();
+    public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
+        List<String> controllerNames = new ArrayList<>();
         try {
             
-            //String path = getClass().getClassLoader().getResource(packageToScan.replace('.', '/')).getPath();
             String path = Thread.currentThread().getContextClassLoader().getResource(packageToScan.replace('.', '/')).getPath();
             String decodedPath = URLDecoder.decode(path, "UTF-8");
             File packageDir = new File(decodedPath);
@@ -26,18 +24,7 @@ public class Util {
                         String className = packageToScan + "." + file.getName().replace(".class", "");
                         Class<?> clazz = Class.forName(className);
                         if (clazz.isAnnotationPresent(annotation.asSubclass(java.lang.annotation.Annotation.class))) {
-                            //controllerNames.add(clazz.getSimpleName());
-                            Method[]methods=clazz.getDeclaredMethods();
-                            for (Method m : methods) {
-                                if (m.isAnnotationPresent(Get.class)) {
-                                    Get getAnnotation= m.getAnnotation(Get.class);
-                                    for(String key:hm.keySet()){
-                                        if(getAnnotation.url().equals(key))
-                                        throw new Exception("Duplicate url : "+getAnnotation.url());
-                                    }
-                                    hm.put(getAnnotation.url(),new Mapping(clazz.getName(),m.getName()));
-                                }
-                            }
+                            controllerNames.add(clazz.getName());
                         }
                     }
                 }
@@ -47,8 +34,56 @@ public class Util {
             throw new Exception("Package introuvable");
         }
        
+        return controllerNames;
+    }
+    public static HashMap<String,Mapping> getAllMethods(List<String>controllers) throws Exception{
+        HashMap<String,Mapping> hm=new HashMap<>();
+        try {
+            for (String c : controllers) {
+                Class<?>clazz=Class.forName(c);
+                Method[]methods=clazz.getDeclaredMethods();
+                for (Method m : methods) {
+                    if (m.isAnnotationPresent(Get.class)) {
+                        Get getAnnotation= m.getAnnotation(Get.class);
+                        String lien = getAnnotation.url();
+                        for(String key:hm.keySet()){
+                            if(lien.equals(key))
+                                 throw new Exception("Duplicate url : "+getAnnotation.url());
+                            }
+                                    
+                    hm.put(lien,new Mapping(clazz.getName(),m.getName()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw e;
+        }
         return hm;
-        
+    }
+    public static Object convertParameterValue(String value, Class<?> type) {
+        if (type == String.class) {
+            return value;
+        } else if (type == int.class || type == Integer.class) {
+            return Integer.parseInt(value);
+        } else if (type == boolean.class || type == Boolean.class) {
+            return Boolean.parseBoolean(value);
+        } else if (type == long.class || type == Long.class) {
+            return Long.parseLong(value);
+        } else if (type == double.class || type == Double.class) {
+            return Double.parseDouble(value);
+        } else if (type == float.class || type == Float.class) {
+            return Float.parseFloat(value);
+        } else if (type == short.class || type == Short.class) {
+            return Short.parseShort(value);
+        } else if (type == byte.class || type == Byte.class) {
+            return Byte.parseByte(value);
+        } else if (type == char.class || type == Character.class) {
+            if (value.length() != 1) {
+                throw new IllegalArgumentException("Invalid character value: " + value);
+            }
+            return value.charAt(0);
+        }
+        return null;
     }
 
    
