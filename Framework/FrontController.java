@@ -20,7 +20,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-
 import annotation.*;
 import model.*;
 
@@ -71,37 +70,42 @@ public class FrontController extends HttpServlet {
                         m = method;
                     }
                 }
+                if(m==null)
+                    throw new ServletException("No such method "+mapping.getMethodeName()+" in class "+mapping.getClassName());
                 
-                //maka parametre anle methode
-                Parameter[] params = m.getParameters();
-                int methodParamCount = params.length;
-                //maka anle parametre nalefa tam requette
-                List<String> paramNames = Collections.list(req.getParameterNames());
-                int requestParamCount = paramNames.size();
-                if (methodParamCount != requestParamCount) {
-                    out.println("Error: The number of parameters sent (" + requestParamCount + ") does not match the number of parameters required by the method (" + methodParamCount + ").");
-                    return;
-                }
-
                 Object instance = c.getDeclaredConstructor().newInstance();
                 Object result;
 
-                if (methodParamCount < 1) {
-                    result = m.invoke(instance);
-                } else {
-                    Object[] paramValues = new Object[methodParamCount];
-                    for (int i = 0; i < params.length; i++) {
-                        String paramName = params[i].isAnnotationPresent(Param.class)
-                            //si vrai
-                            ? params[i].getAnnotation(Param.class).name()
-                            //sinon
-                            : params[i].getName();
+                //maka parametre anle methode
+                // Parameter[] params = m.getParameters();
+                // int methodParamCount = params.length;
+                // //maka anle parametre nalefa tam requette
+                // List<String> paramNames = Collections.list(req.getParameterNames());
+                // int requestParamCount = paramNames.size();
+                // if (methodParamCount != requestParamCount) {
+                //     out.println("Error: The number of parameters sent (" + requestParamCount + ") does not match the number of parameters required by the method (" + methodParamCount + ").");
+                //     return;
+                // }
 
-                        String paramValue = req.getParameter(paramName);
-                        paramValues[i] = Util.convertParameterValue(paramValue, params[i].getType());
-                    }
-                    result = m.invoke(instance, paramValues);
-                }
+                
+                Object[] paramValues = Util.getParameterValues(req,m,Param.class,ParamObjet.class);
+                result = m.invoke(instance, paramValues);
+                // if (methodParamCount < 1) {
+                //     result = m.invoke(instance);
+                // } else {
+                //     Object[] paramValues = new Object[methodParamCount];
+                //     for (int i = 0; i < params.length; i++) {
+                //         String paramName = params[i].isAnnotationPresent(Param.class)
+                //             //si vrai
+                //             ? params[i].getAnnotation(Param.class).name()
+                //             //sinon
+                //             : params[i].getName();
+
+                //         String paramValue = req.getParameter(paramName);
+                //         paramValues[i] = Util.convertParameterValue(paramValue, params[i].getType());
+                //     }
+                //     result = m.invoke(instance, paramValues);
+                // }
 
                 if (result instanceof ModelView) {
                     ModelView mv = (ModelView) result;
