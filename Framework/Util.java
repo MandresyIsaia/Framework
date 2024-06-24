@@ -7,8 +7,51 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.lang.reflect.*;
+import java.lang.reflect.Parameter;
 import annotation.*;
+import javax.servlet.http.HttpServletRequest;
 public class Util {
+    public static Object[] getParameterValues(HttpServletRequest req,Method method,Class<Param> paramAnnotationClass,Class<ParamObjet> paramObjectAnnotationClass)throws Exception{
+        System.out.println("aoo");
+        Parameter[] parameters = method.getParameters();
+        Object[] parameterValues = new Object[parameters.length];
+        for (int i = 0;i<parameterValues.length ;i++ ) {
+            String paramName ="";
+            if(parameters[i].isAnnotationPresent(paramAnnotationClass)){
+                paramName = parameters[i].getAnnotation(paramAnnotationClass).name();
+                String paramValue = req.getParameter(paramName);
+                parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());
+
+            }else if(parameters[i].isAnnotationPresent(paramObjectAnnotationClass)){
+                String objName = parameters[i].getAnnotation(paramObjectAnnotationClass).name();
+                try{
+                    Object paramObjectInstance = parameters[i].getType().getDeclaredConstructor().newInstance();
+                    Field[] fields = parameters[i].getType().getDeclaredFields();
+                    for (Field field :fields ) {
+                        String fieldName="";
+                        if(field.isAnnotationPresent(AttributAnnotation.class)){
+                            fieldName = field.getAnnotation(AttributAnnotation.class).name();
+                        }else{
+                            fieldName = field.getName();
+                        }
+                        String paramValue = req.getParameter(objName+"."+fieldName);
+                        System.out.println(fieldName);
+                        field.setAccessible(true);
+                        field.set(paramObjectInstance,Util.convertParameterValue(paramValue,field.getType()));
+                    }
+                    parameterValues[i]=paramObjectInstance;
+                }catch(Exception e){
+                    throw new Exception(e.getMessage());
+                }
+            }
+            else{
+                paramName = parameters[i].getName();
+                String paramValue = req.getParameter(paramName);
+                parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());
+            }
+        }
+        return parameterValues;
+    }
     public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
         List<String> controllerNames = new ArrayList<>();
         try {
