@@ -12,7 +12,6 @@ import annotation.*;
 import javax.servlet.http.HttpServletRequest;
 public class Util {
     public static Object[] getParameterValues(HttpServletRequest req,Method method,Class<Param> paramAnnotationClass,Class<ParamObjet> paramObjectAnnotationClass)throws Exception{
-        System.out.println("aoo");
         Parameter[] parameters = method.getParameters();
         Object[] parameterValues = new Object[parameters.length];
         for (int i = 0;i<parameterValues.length ;i++ ) {
@@ -45,9 +44,17 @@ public class Util {
                 }
             }
             else{
+                System.out.println("tsisy annotation");
                 paramName = parameters[i].getName();
                 String paramValue = req.getParameter(paramName);
-                parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());
+
+                if(paramValue == null){
+                    parameterValues[i]=null;    
+                }else{
+                    parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());    
+                }
+                
+                // throw new Exception("ETU002462 tsisy annotation");
             }
         }
         return parameterValues;
