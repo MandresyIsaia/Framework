@@ -1,6 +1,6 @@
 package controller;
 
-import util.Util;
+import util.*;
 import util.Mapping;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +20,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.*;
+import javax.servlet.http.HttpSession;
 import annotation.*;
 import model.*;
 
@@ -74,6 +76,14 @@ public class FrontController extends HttpServlet {
                     throw new ServletException("No such method "+mapping.getMethodeName()+" in class "+mapping.getClassName());
                 
                 Object instance = c.getDeclaredConstructor().newInstance();
+                Field[] fields = c.getDeclaredFields();
+                for (Field field :fields ) {
+                    if(field.getType()==MySession.class){
+                        System.out.println("MySession class");
+                        field.setAccessible(true);
+                        field.set(instance,new MySession(req.getSession()));
+                    }
+                }
                 Object result;
 
                 //maka parametre anle methode
@@ -89,6 +99,14 @@ public class FrontController extends HttpServlet {
 
                 
                 Object[] paramValues = Util.getParameterValues(req,m,Param.class,ParamObjet.class);
+                for (int i = 0;i<paramValues.length ;i++ ) {
+                    Type parameterType = m.getParameters()[i].getParameterizedType();
+                    if(paramValues[i]==null && parameterType.getTypeName().equals(MySession.class.getTypeName())){
+                        System.out.println(i);
+                        MySession session = new MySession(req.getSession());
+                        paramValues[i]=session;
+                    }
+                }
                 result = m.invoke(instance, paramValues);
                 // if (methodParamCount < 1) {
                 //     result = m.invoke(instance);
@@ -132,6 +150,9 @@ public class FrontController extends HttpServlet {
             } catch (Exception e) {
                 e.printStackTrace();
                 out.println("Error: " + e.getMessage());
+                RequestDispatcher dispatch = req.getRequestDispatcher("/erreur.jsp");
+                req.setAttribute("erreur", e.getMessage());
+                dispatch.forward(req, res);
             }
         }
 
