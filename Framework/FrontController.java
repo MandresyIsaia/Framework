@@ -194,7 +194,9 @@ public class FrontController extends HttpServlet {
         }
 
         if (!urlExists) {
-            out.println("Error 404 - No method is associated with the URL: " + url);
+            res.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            res.setContentType("text/plain");
+            out.println("No method is associated with the URL: " + url);
         }
     }
 }
