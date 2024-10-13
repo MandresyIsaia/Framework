@@ -1,125 +1,165 @@
 package controller;
 
-import annotation.*;
-import com.google.gson.Gson;
-import utils.*;
-import javax.servlet.RequestDispatcher;
+import util.*;
+import util.Mapping;
+import java.util.List;
+import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.stream.Collectors;
+import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
+import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.*;
-import java.util.HashMap;
-import exception.*;
+import javax.servlet.http.HttpSession;
+import annotation.*;
+import model.*;
+import com.google.gson.Gson;
 
 public class FrontController extends HttpServlet {
-    private HashMap<String, Mapping> hashMap;
+    private List<String>controllers;
+    private HashMap<String, Mapping> map;
 
     @Override
     public void init() throws ServletException {
         try {
-            String packageName = this.getInitParameter("nom_package");
-            hashMap = Scan.getAllClassSelonAnnotation2(this, packageName, AnnotationController.class);
-            System.out.println("Initialization completed. HashMap size: " + hashMap.size());
-        } catch (PackageNotFoundException e) {
-            throw new ServletException("Initialization error - Package not found: " + e.getMessage(), e);
+            String packageName = this.getInitParameter("package_name");
+            System.out.println(packageName);
+            controllers = Util.getAllClassesSelonAnnotation(packageName,ControllerAnnotation.class);
+            map = Util.getAllMethods(controllers);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ServletException("Initialization failed: " + e.getMessage(), e);
         }
     }
 
-    protected void processRequest(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        response.setContentType("text/html;charset=UTF-8");
-        PrintWriter out = response.getWriter();
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        processRequest(req, res);
+    }
 
-        String url = request.getRequestURI().substring(request.getContextPath().length());
-        System.out.println("Request URI: " + url);
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        processRequest(req, res);
+    }
 
-        if (hashMap != null) {
-            Mapping mapping = hashMap.get(url);
-            if (mapping != null) {
-                try {
-                    Class<?> clazz = Class.forName(mapping.getClassName());
-                    Method method = null;
+    private void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        res.setContentType("text/html");
+        System.out.println(controllers.size());
+        // for (int i = 0;i<controllers.size() ;i++ ) {
+        //         System.out.println(controllers.get(i));
+        // }
+        // for (Map.Entry<String,Mapping> entry:map.entrySet()) {
+        //     String key = entry.getKey();
+        //     System.out.println(key);
+        // }
+        PrintWriter out = res.getWriter();
 
-                    for (Method m : clazz.getDeclaredMethods()) {
-                        if (m.getName().equals(mapping.getMethodName())) {
-                            method = m;
-                            break;
-                        }
+        String url = req.getRequestURI();
+       
+        boolean urlExists = false;
+
+        if (map.containsKey(url)) {
+            urlExists = true;
+            Mapping mapping = map.get(url);
+
+            try {
+                Class<?> c = Class.forName(mapping.getClassName());
+                Method[]methods=c.getDeclaredMethods();
+                Method m = null;
+                for (Method method : methods) {
+                    if (method.getName().equals(mapping.getMethodeName())) {
+                        m = method;
                     }
-
-                    if (method == null) {
-                        throw new NoSuchMethodException(
-                                "Method " + mapping.getMethodName() + " not found in " + clazz.getName());
+                }
+                if(m==null)
+                    throw new ServletException("No such method "+mapping.getMethodeName()+" in class "+mapping.getClassName());
+                
+                Object instance = c.getDeclaredConstructor().newInstance();
+                Field[] fields = c.getDeclaredFields();
+                for (Field field :fields ) {
+                    if(field.getType()==MySession.class){
+                        System.out.println("MySession class");
+                        field.setAccessible(true);
+                        field.set(instance,new MySession(req.getSession()));
                     }
-
-                    Object instance = clazz.getDeclaredConstructor().newInstance();
-                    Object[] parameterValues = Utils.getParameterValues(request, method, Param.class,
-                            ParamObject.class);
-
-                    // Initialisation de MySession dans un attribut
-                    Field sessionField = null;
-                    for (Field field : clazz.getDeclaredFields()) {
-                        if (field.getType().equals(MySession.class)) {
-                            sessionField = field;
-                            break;
-                        }
+                }
+                Object result;
+                
+                Object[] paramValues = Util.getParameterValues(req,m,Param.class,ParamObjet.class);
+                for (int i = 0;i<paramValues.length ;i++ ) {
+                    Type parameterType = m.getParameters()[i].getParameterizedType();
+                    if(paramValues[i]==null && parameterType.getTypeName().equals(MySession.class.getTypeName())){
+                        System.out.println(i);
+                        MySession session = new MySession(req.getSession());
+                        paramValues[i]=session;
                     }
-                    if (sessionField != null) {
-                        sessionField.setAccessible(true);
-                        sessionField.set(instance, new MySession(request.getSession()));
-                    }
-
-                    // Initialisation de MySession dans un paramètre
-                    for (int i = 0; i < parameterValues.length; i++) {
-                        if (parameterValues[i] == null && method.getParameterTypes()[i].equals(MySession.class)) {
-                            MySession session = new MySession(request.getSession());
-                            parameterValues[i] = session;
-                        }
-                    }
-
-                    Object result = method.invoke(instance, parameterValues);
-                    if (method.isAnnotationPresent(ResponseBody.class)) {
+                }
+                result = m.invoke(instance, paramValues);
+                
+                if(m.isAnnotationPresent(ResponseBody.class)){
+                    res.setContentType("text/json");
+                    if(!(result instanceof ModelView)){
                         Gson gson = new Gson();
                         String jsonResponse = gson.toJson(result);
                         out.println(jsonResponse);
-                    } else if (result instanceof ModelView) {
-                        ModelView modelView = (ModelView) result;
-                        RequestDispatcher dispatch = request.getRequestDispatcher(modelView.getUrl());
-                        HashMap<String, Object> data = modelView.getData();
-                        for (String keyData : data.keySet()) {
-                            request.setAttribute(keyData, data.get(keyData));
-                            System.out.println(keyData);
+                        out.flush();
+                    }else{
+                        ModelView mv = (ModelView) result;
+                        HashMap<String, Object> data = mv.getData();
+                        Gson gson = new Gson();
+                        String jsonResponse = gson.toJson(data);
+                        out.println(jsonResponse);
+                        out.flush();                       
+                    }
+                }
+                else{
+                    if (result instanceof ModelView) {
+                        ModelView mv = (ModelView) result;
+                        String jspPath = mv.getUrl();
+                        ServletContext context = getServletContext();
+                        String realPath = context.getRealPath(jspPath);
+
+                        if (realPath == null || !new File(realPath).exists()) {
+                            throw new ServletException("The JSP page " + jspPath + " does not exist.");
                         }
-                        dispatch.forward(request, response);
+
+                        HashMap<String, Object> data = mv.getData();
+                        for (Map.Entry<String, Object> entry : data.entrySet()) {
+                            req.setAttribute(entry.getKey(), entry.getValue());
+                        }
+
+                        RequestDispatcher dispatch = req.getRequestDispatcher(jspPath);
+                        dispatch.forward(req, res);
                     } else if (result instanceof String) {
                         out.println(result.toString());
                     } else {
-                        out.println("Unsupported return type from controller method.");
+                        throw new ServletException("Unknown return type: " + result.getClass().getSimpleName());
                     }
-                } catch (Exception e) {
-                    out.println("Error invoking method: " + e.getMessage());
                 }
-            } else {
-                response.sendError(HttpServletResponse.SC_NOT_FOUND, "No mapping found for URL: " + url);
+                    
+            } catch (Exception e) {
+                e.printStackTrace();
+                out.println("Error: " + e.getMessage());
+                RequestDispatcher dispatch = req.getRequestDispatcher("/erreur.jsp");
+                req.setAttribute("erreur", e.getMessage());
+                dispatch.forward(req, res);
             }
-        } else {
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-                    "HashMap is null. Initialization may have failed.");
         }
-    }
 
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        processRequest(request, response);
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        processRequest(request, response);
+        if (!urlExists) {
+            out.println("No method is associated with the URL: " + url);
+        }
     }
 }
