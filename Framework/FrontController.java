@@ -1,7 +1,9 @@
 package controller;
 
-import util.*;
+import util.Util;
 import util.Mapping;
+import util.MySession;
+import util.VerbAction;
 import java.util.List;
 import java.util.Map;
 import java.io.File;
@@ -18,26 +20,24 @@ import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.lang.reflect.*;
-import javax.servlet.http.HttpSession;
 import annotation.*;
 import model.*;
 import com.google.gson.Gson;
 
 public class FrontController extends HttpServlet {
-    private List<String>controllers;
+    private List<String> controllers;
     private HashMap<String, Mapping> map;
 
     @Override
     public void init() throws ServletException {
         try {
             String packageName = this.getInitParameter("package_name");
-            System.out.println(packageName);
-            controllers = Util.getAllClassesSelonAnnotation(packageName,ControllerAnnotation.class);
+            controllers = Util.getAllClassesSelonAnnotation(packageName, ControllerAnnotation.class);
             map = Util.getAllMethods(controllers);
-            
         } catch (Exception e) {
             e.printStackTrace();
             throw new ServletException("Initialization failed: " + e.getMessage(), e);
@@ -56,75 +56,111 @@ public class FrontController extends HttpServlet {
 
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("text/html");
-        System.out.println(controllers.size());
-        // for (int i = 0;i<controllers.size() ;i++ ) {
-        //         System.out.println(controllers.get(i));
-        // }
-        // for (Map.Entry<String,Mapping> entry:map.entrySet()) {
-        //     String key = entry.getKey();
-        //     System.out.println(key);
-        // }
         PrintWriter out = res.getWriter();
 
         String url = req.getRequestURI();
-       
         boolean urlExists = false;
 
         if (map.containsKey(url)) {
             urlExists = true;
             Mapping mapping = map.get(url);
+            String requestMethod = req.getMethod();
 
             try {
-                Class<?> c = Class.forName(mapping.getClassName());
-                Method[]methods=c.getDeclaredMethods();
                 Method m = null;
-                for (Method method : methods) {
-                    if (method.getName().equals(mapping.getMethodeName())) {
-                        m = method;
+                for (VerbAction action : mapping.getVerbactions()) {
+                    if (action.getVerb().equalsIgnoreCase(requestMethod)) {
+                        Class<?> c = Class.forName(mapping.getClassName());
+                        Method[] methods = c.getDeclaredMethods();
+                        for (Method method : methods) {
+                            if (method.getName().equals(action.getMethodName())) {
+                                m = method;
+                                break;
+                            }
+                        }
+                        break;
                     }
                 }
-                if(m==null)
-                    throw new ServletException("No such method "+mapping.getMethodeName()+" in class "+mapping.getClassName());
-                
-                Object instance = c.getDeclaredConstructor().newInstance();
-                Field[] fields = c.getDeclaredFields();
-                for (Field field :fields ) {
-                    if(field.getType()==MySession.class){
-                        System.out.println("MySession class");
+
+                if (m == null) {
+                    throw new ServletException("Method not found in class " + mapping.getClassName());
+                }
+
+                Parameter[] params = m.getParameters();
+                Object instance = Class.forName(mapping.getClassName()).getDeclaredConstructor().newInstance();
+                Field[] attributs = instance.getClass().getDeclaredFields();
+                for (Field field : attributs) {
+                    if (field.getType().equals(MySession.class)) {
+                        HttpSession httpSession = req.getSession(false);
+                        if (httpSession == null) {
+                            httpSession = req.getSession(true);
+                        }
+                        MySession session = new MySession(httpSession);
                         field.setAccessible(true);
-                        field.set(instance,new MySession(req.getSession()));
+                        field.set(instance, session);
                     }
                 }
+
                 Object result;
-                
-                Object[] paramValues = Util.getParameterValues(req,m,Param.class,ParamObjet.class);
-                for (int i = 0;i<paramValues.length ;i++ ) {
-                    Type parameterType = m.getParameters()[i].getParameterizedType();
-                    if(paramValues[i]==null && parameterType.getTypeName().equals(MySession.class.getTypeName())){
-                        System.out.println(i);
-                        MySession session = new MySession(req.getSession());
-                        paramValues[i]=session;
+
+                if (params.length < 1) {
+                    result = m.invoke(instance);
+                } else {
+                    Object[] parameterValues = new Object[params.length];
+
+                    for (int i = 0; i < params.length; i++) {
+                        Parameter param = params[i];
+                        if (param.getType().equals(MySession.class)) {
+                            HttpSession httpSession = req.getSession(false);
+                            if (httpSession == null) {
+                                httpSession = req.getSession(true);
+                            }
+                            MySession session = new MySession(httpSession);
+                            parameterValues[i] = session;
+                        } else if (param.isAnnotationPresent(Param.class)) {
+                            Param paramAnnotation = param.getAnnotation(Param.class);
+                            String paramName = paramAnnotation.name();
+                            String paramValue = req.getParameter(paramName);
+                            parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                        } else if (param.isAnnotationPresent(ParamObject.class)) {
+                            ParamObject paramObjectAnnotation = param.getAnnotation(ParamObject.class);
+                            String objName = paramObjectAnnotation.objName();
+                            Object paramObjectInstance = param.getType().getDeclaredConstructor().newInstance();
+                            Field[] fields = param.getType().getDeclaredFields();
+                            for (Field field : fields) {
+                                String fieldName = field.getName();
+                                String paramValue = req.getParameter(objName + "." + fieldName);
+                                field.setAccessible(true);
+                                field.set(paramObjectInstance, Util.convertParameterValue(paramValue, field.getType()));
+                            }
+                            parameterValues[i] = paramObjectInstance;
+                        } else {
+                            String paramName = param.getName();
+                            if (paramName == null || paramName.isEmpty()) {
+                                throw new RuntimeException("Parameter name could not be determined for parameter index " + i);
+                            }
+                            String paramValue = req.getParameter(paramName);
+                            parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                        }
                     }
+                    result = m.invoke(instance, parameterValues);
                 }
-                result = m.invoke(instance, paramValues);
-                
-                if(m.isAnnotationPresent(ResponseBody.class)){
-                    res.setContentType("text/json");
-                    if(!(result instanceof ModelView)){
-                        Gson gson = new Gson();
-                        String jsonResponse = gson.toJson(result);
-                        out.println(jsonResponse);
-                        out.flush();
-                    }else{
+
+                if (m.isAnnotationPresent(Restapi.class)) {
+                    if (result instanceof ModelView) {
                         ModelView mv = (ModelView) result;
                         HashMap<String, Object> data = mv.getData();
                         Gson gson = new Gson();
-                        String jsonResponse = gson.toJson(data);
-                        out.println(jsonResponse);
-                        out.flush();                       
+                        String json = gson.toJson(data);
+                        res.setContentType("application/json");
+                        out.println(json);
+                    } else {
+                        Gson gson = new Gson();
+                        String json = gson.toJson(result);
+                        res.setContentType("application/json");
+                        out.println(json);
                     }
-                }
-                else{
+                } else {
                     if (result instanceof ModelView) {
                         ModelView mv = (ModelView) result;
                         String jspPath = mv.getUrl();
@@ -148,18 +184,17 @@ public class FrontController extends HttpServlet {
                         throw new ServletException("Unknown return type: " + result.getClass().getSimpleName());
                     }
                 }
-                    
+
             } catch (Exception e) {
                 e.printStackTrace();
-                out.println("Error: " + e.getMessage());
-                RequestDispatcher dispatch = req.getRequestDispatcher("/erreur.jsp");
-                req.setAttribute("erreur", e.getMessage());
+                req.setAttribute("error", e.getMessage());
+                RequestDispatcher dispatch = req.getRequestDispatcher("/error.jsp");
                 dispatch.forward(req, res);
             }
         }
 
         if (!urlExists) {
-            out.println("No method is associated with the URL: " + url);
+            out.println("Error 404 - No method is associated with the URL: " + url);
         }
     }
 }

@@ -7,58 +7,8 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.lang.reflect.*;
-import java.lang.reflect.Parameter;
 import annotation.*;
-import javax.servlet.http.HttpServletRequest;
 public class Util {
-    public static Object[] getParameterValues(HttpServletRequest req,Method method,Class<Param> paramAnnotationClass,Class<ParamObjet> paramObjectAnnotationClass)throws Exception{
-        Parameter[] parameters = method.getParameters();
-        Object[] parameterValues = new Object[parameters.length];
-        for (int i = 0;i<parameterValues.length ;i++ ) {
-            String paramName ="";
-            if(parameters[i].isAnnotationPresent(paramAnnotationClass)){
-                paramName = parameters[i].getAnnotation(paramAnnotationClass).name();
-                String paramValue = req.getParameter(paramName);
-                parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());
-
-            }else if(parameters[i].isAnnotationPresent(paramObjectAnnotationClass)){
-                String objName = parameters[i].getAnnotation(paramObjectAnnotationClass).name();
-                try{
-                    Object paramObjectInstance = parameters[i].getType().getDeclaredConstructor().newInstance();
-                    Field[] fields = parameters[i].getType().getDeclaredFields();
-                    for (Field field :fields ) {
-                        String fieldName="";
-                        if(field.isAnnotationPresent(AttributAnnotation.class)){
-                            fieldName = field.getAnnotation(AttributAnnotation.class).name();
-                        }else{
-                            fieldName = field.getName();
-                        }
-                        String paramValue = req.getParameter(objName+"."+fieldName);
-                        System.out.println(fieldName);
-                        field.setAccessible(true);
-                        field.set(paramObjectInstance,Util.convertParameterValue(paramValue,field.getType()));
-                    }
-                    parameterValues[i]=paramObjectInstance;
-                }catch(Exception e){
-                    throw new Exception(e.getMessage());
-                }
-            }
-            else{
-                System.out.println("tsisy annotation");
-                paramName = parameters[i].getName();
-                String paramValue = req.getParameter(paramName);
-
-                if(paramValue == null){
-                    parameterValues[i]=null;    
-                }else{
-                    parameterValues[i]=Util.convertParameterValue(paramValue,parameters[i].getType());    
-                }
-                
-                // throw new Exception("ETU002462 tsisy annotation");
-            }
-        }
-        return parameterValues;
-    }
     public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
         List<String> controllerNames = new ArrayList<>();
         try {
@@ -86,22 +36,35 @@ public class Util {
        
         return controllerNames;
     }
-    public static HashMap<String,Mapping> getAllMethods(List<String>controllers) throws Exception{
-        HashMap<String,Mapping> hm=new HashMap<>();
+    public static HashMap<String, Mapping> getAllMethods(List<String> controllers) throws Exception {
+        HashMap<String, Mapping> hm = new HashMap<>();
         try {
             for (String c : controllers) {
-                Class<?>clazz=Class.forName(c);
-                Method[]methods=clazz.getDeclaredMethods();
+                Class<?> clazz = Class.forName(c);
+                Method[] methods = clazz.getDeclaredMethods();
                 for (Method m : methods) {
-                    if (m.isAnnotationPresent(Get.class)) {
-                        Get getAnnotation= m.getAnnotation(Get.class);
-                        String lien = getAnnotation.url();
-                        for(String key:hm.keySet()){
-                            if(lien.equals(key))
-                                 throw new Exception("Duplicate url : "+getAnnotation.url());
-                            }
-                                    
-                    hm.put(lien,new Mapping(clazz.getName(),m.getName()));
+                    if (m.isAnnotationPresent(Url.class)) {
+                        Url urlAnnotation = m.getAnnotation(Url.class);
+                        String lien = urlAnnotation.url();
+                        
+                        if (!hm.containsKey(lien)) {
+                            hm.put(lien, new Mapping(clazz.getName()));
+                        }
+                        
+                        boolean isGet = m.isAnnotationPresent(Get.class);
+                        boolean isPost = m.isAnnotationPresent(Post.class);
+                        if (!isGet && !isPost) {
+                            isGet = true;
+                        }
+    
+                        String verb = null;
+                        if (isGet) {
+                            verb="GET";
+                        }
+                        else{
+                            verb="POST";
+                        }
+                        hm.get(lien).addVerbAction(m.getName(), verb);
                     }
                 }
             }
@@ -135,6 +98,7 @@ public class Util {
         }
         return null;
     }
+    
 
    
 }
