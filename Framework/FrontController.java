@@ -4,6 +4,7 @@ import util.Util;
 import util.Mapping;
 import util.MySession;
 import util.VerbAction;
+import util.FormValidator;
 import java.util.List;
 import java.util.Map;
 import java.io.File;
@@ -20,6 +21,7 @@ import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpSession;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -142,6 +144,8 @@ public class FrontController extends HttpServlet {
                             }
                             
                         } else if (param.isAnnotationPresent(ParamObject.class)) {
+                            Map<String,String>values=new HashMap<String,String>();
+                            Map<String, String> errors = new HashMap<String,String>();
                             ParamObject paramObjectAnnotation = param.getAnnotation(ParamObject.class);
                             String objName = paramObjectAnnotation.objName();
                             Object paramObjectInstance = param.getType().getDeclaredConstructor().newInstance();
@@ -149,8 +153,39 @@ public class FrontController extends HttpServlet {
                             for (Field field : fields) {
                                 String fieldName = field.getName();
                                 String paramValue = req.getParameter(objName + "." + fieldName);
+                                values.put(objName + "." + fieldName, paramValue);
                                 field.setAccessible(true);
-                                field.set(paramObjectInstance, Util.convertParameterValue(paramValue, field.getType()));
+                                String error = null;
+                                error = FormValidator.validateField1(field,paramValue);
+                                if(error == null){
+                                    field.set(paramObjectInstance, Util.convertParameterValue(paramValue, field.getType()));    
+                                }else{
+                                    errors.put(objName+"."+fieldName,error);
+                                }
+                                
+                            }
+                            if (!errors.isEmpty()) {
+                                req.setAttribute("errors", errors);
+                                req.setAttribute("values", values);
+
+                                OnError onError = m.getAnnotation(OnError.class);
+                                String errorUrl = null;
+                                if (onError != null) {
+                                    errorUrl = onError.url();
+                                }
+
+                                HttpServletRequest wrappedRequest = new HttpServletRequestWrapper(req) {
+                                    @Override
+                                    public String getMethod() {
+                                        // Forcer la méthode à "GET"
+                                        return "GET";
+                                    }
+                                };
+
+                                
+                                RequestDispatcher dispatch = req.getRequestDispatcher(errorUrl);
+                                dispatch.forward(wrappedRequest, res);
+                                return;
                             }
                             parameterValues[i] = paramObjectInstance;
                         } else {
