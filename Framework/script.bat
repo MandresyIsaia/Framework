@@ -1,5 +1,5 @@
 @echo off
-set DESTINATION_DIR=D:\s4\Naina\sprint14Vrai\Test
+set DESTINATION_DIR=D:\s4\Naina\sprint15Vrai\Test
 
 if not exist "%DESTINATION_DIR%\lib" (
     mkdir "%DESTINATION_DIR%\lib"
