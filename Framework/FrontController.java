@@ -41,11 +41,15 @@ import javax.servlet.http.Part;
 public class FrontController extends HttpServlet {
     private List<String> controllers;
     private HashMap<String, Mapping> map;
+    private String authAttribute;
+    private String roleAttribute;
 
     @Override
     public void init() throws ServletException {
         try {
             String packageName = this.getInitParameter("package_name");
+            this.authAttribute = this.getInitParameter("auth");
+            this.roleAttribute = this.getInitParameter("roleName");
             controllers = Util.getAllClassesSelonAnnotation(packageName, ControllerAnnotation.class);
             map = Util.getAllMethods(controllers);
         } catch (Exception e) {
@@ -95,7 +99,26 @@ public class FrontController extends HttpServlet {
                 if (m == null) {
                     throw new ServletException("Method not found in class " + mapping.getClassName());
                 }
-
+                if (m.isAnnotationPresent(Auth.class)) {
+                    if (req.getSession(false).getAttribute(this.authAttribute)==null) {
+                        //res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        //out.println("Error 401 - Unauthorized action");
+                        res.sendError(HttpServletResponse.SC_UNAUTHORIZED," Unauthorized action");
+                        return;
+                        //throw new ServletException("Unauthorized action");
+                    }
+                }
+                if (m.isAnnotationPresent(Role.class)) {
+                    Role role = m.getAnnotation(Role.class);
+                    String roleName = role.name();
+                    if(!req.getSession(false).getAttribute(this.roleAttribute).equals(roleName)) {
+                        res.sendError(HttpServletResponse.SC_UNAUTHORIZED," Unauthorized action");
+                        return;
+                        //out.println("Error 401 - Unauthorized action");
+                        //throw new ServletException("Unauthorized action");
+                    }
+                }
+                
                 Parameter[] params = m.getParameters();
                 Object instance = Class.forName(mapping.getClassName()).getDeclaredConstructor().newInstance();
                 Field[] attributs = instance.getClass().getDeclaredFields();
