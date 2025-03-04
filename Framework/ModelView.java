@@ -5,6 +5,8 @@ import java.util.HashMap;
 public class ModelView {
     String url;
     HashMap<String,Object> data;
+    String redirect;
+    String redirectMethod;
     public ModelView() {
         this.data = new HashMap<>();
     }
@@ -19,6 +21,11 @@ public class ModelView {
     public ModelView(String url, HashMap<String, Object> data) {
         this.url = url;
         this.data = data;
+    }
+    public ModelView(String url, HashMap<String, Object> data, String redirect) {
+        this.url = url;
+        this.data = data;
+        this.redirect = redirect;
     }
 
     public String getUrl() {
@@ -36,6 +43,24 @@ public class ModelView {
     public void add(String cle,Object value){
         this.data.put(cle, value);
     }
-    
+    public String getRedirect() {
+        return redirect;
+    }
+
+
+    public void setRedirect(String redirect) {
+        this.redirect = redirect;
+    }
+
+
+    public String getRedirectMethod() {
+        return redirectMethod;
+    }
+
+
+    public void setRedirectMethod(String redirectMethod) {
+        this.redirectMethod = redirectMethod;
+    }
+
     
 }
