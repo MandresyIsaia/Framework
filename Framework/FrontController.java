@@ -251,21 +251,37 @@ public class FrontController extends HttpServlet {
                 } else {
                     if (result instanceof ModelView) {
                         ModelView mv = (ModelView) result;
+                        if (mv.getRedirect() != null) {
+                            String redirectUrl = mv.getRedirect();
+                            if (mv.getRedirectMethod().equals("POST")) {
+                                req.getRequestDispatcher("/"+redirectUrl).forward(req,res);
+                            }
+                            else{
+                                res.sendRedirect("/"+redirectUrl);
+                            }
+                            return;
+                        }
+
                         String jspPath = mv.getUrl();
-                        ServletContext context = getServletContext();
-                        String realPath = context.getRealPath(jspPath);
+                        if(jspPath!= null){
+                            ServletContext context = getServletContext();
+                            String realPath = context.getRealPath(jspPath);
 
-                        if (realPath == null || !new File(realPath).exists()) {
-                            throw new ServletException("The JSP page " + jspPath + " does not exist.");
+                            if (realPath == null || !new File(realPath).exists()) {
+                                throw new ServletException("The JSP page " + jspPath + " does not exist.");
+                            }
+
+                            HashMap<String, Object> data = mv.getData();
+                            for (Map.Entry<String, Object> entry : data.entrySet()) {
+                                req.setAttribute(entry.getKey(), entry.getValue());
+                            }
+
+                            RequestDispatcher dispatch = req.getRequestDispatcher(jspPath);
+                            dispatch.forward(req, res);    
+                        }else{
+                            throw new ServletException("ModelView does not contain a JSP URL.");
                         }
-
-                        HashMap<String, Object> data = mv.getData();
-                        for (Map.Entry<String, Object> entry : data.entrySet()) {
-                            req.setAttribute(entry.getKey(), entry.getValue());
-                        }
-
-                        RequestDispatcher dispatch = req.getRequestDispatcher(jspPath);
-                        dispatch.forward(req, res);
+                        
                     } else if (result instanceof String) {
                         out.println(result.toString());
                     } else {
