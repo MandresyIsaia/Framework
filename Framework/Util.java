@@ -8,6 +8,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.lang.reflect.*;
 import annotation.*;
+import javax.servlet.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.io.*;
+import exception.*;
+import javax.servlet.http.*;
+import javax.servlet.http.Part;
+
+import javax.servlet.*;
 public class Util {
     public static List<String> getAllClassesSelonAnnotation(String packageToScan,Class<?>annotation) throws Exception{
         List<String> controllerNames = new ArrayList<>();
@@ -74,6 +85,7 @@ public class Util {
         return hm;
     }
     public static Object convertParameterValue(String value, Class<?> type) {
+        
         if (type == String.class) {
             return value;
         } else if (type == int.class || type == Integer.class) {
@@ -99,6 +111,38 @@ public class Util {
         return null;
     }
     
+    public static void generateCsvResponse(List<?> data, String[] fields, String fileName, HttpServletResponse response)
+            throws IOException {
+        response.setContentType("text/csv;charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
 
+        try (BufferedWriter writer = new BufferedWriter(response.getWriter())) {
+            for (int i = 0; i < fields.length; i++) {
+                writer.write(fields[i]);
+                if (i < fields.length - 1)
+                    writer.write(",");
+            }
+            writer.newLine();
+
+            for (Object obj : data) {
+                Class<?> clazz = obj.getClass();
+                for (int i = 0; i < fields.length; i++) {
+                    try {
+                        Field field = clazz.getDeclaredField(fields[i]);
+                        field.setAccessible(true);
+                        Object value = field.get(obj);
+                        writer.write(value != null ? value.toString() : "");
+                    } catch (NoSuchFieldException | IllegalAccessException e) {
+                        writer.write("");
+                    }
+                    if (i < fields.length - 1)
+                        writer.write(",");
+                }
+                writer.newLine();
+            }
+
+            writer.flush();
+        }
+    }
    
 }
