@@ -71,10 +71,14 @@ public class FrontController extends HttpServlet {
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("text/html");
         PrintWriter out = res.getWriter();
-
-        String url = req.getRequestURI();
-        boolean urlExists = false;
-
+        // maka ny uri complet
+        String uri = req.getRequestURI();
+        // maka ny racine ny url ao am tomcat
+        String contextPath=req.getContextPath()+"/";
+        // esorina le context fa le url tsotra fotsiny no alaina
+        String url=uri.substring(contextPath.length());
+        
+        Boolean urlExists = false;
         if (map.containsKey(url)) {
             urlExists = true;
             Mapping mapping = map.get(url);
@@ -162,8 +166,16 @@ public class FrontController extends HttpServlet {
                                 }
                             }else{
                                 String paramName = paramAnnotation.name();
-                                String paramValue = req.getParameter(paramName);
-                                parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                                
+                                if(param.getType().isArray() && param.getType().getComponentType().equals(String.class)){
+                                    
+                                    String[] paramValue = req.getParameterValues(paramName);    
+                                    parameterValues[i] = paramValue;
+                                }else{
+                                    String paramValue = req.getParameter(paramName);    
+                                    parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                                }
+                                
                             }
                             
                         } else if (param.isAnnotationPresent(ParamObject.class)) {
@@ -176,16 +188,17 @@ public class FrontController extends HttpServlet {
                             for (Field field : fields) {
                                 String fieldName = field.getName();
                                 String paramValue = req.getParameter(objName + "." + fieldName);
-                                values.put(objName + "." + fieldName, paramValue);
-                                field.setAccessible(true);
-                                String error = null;
-                                error = FormValidator.validateField1(field,paramValue);
-                                if(error == null){
-                                    field.set(paramObjectInstance, Util.convertParameterValue(paramValue, field.getType()));    
-                                }else{
-                                    errors.put(objName+"."+fieldName,error);
+                                if(paramValue!= null){
+                                    values.put(objName + "." + fieldName, paramValue);
+                                    field.setAccessible(true);
+                                    String error = null;
+                                    error = FormValidator.validateField1(field,paramValue);
+                                    if(error == null){
+                                        field.set(paramObjectInstance, Util.convertParameterValue(paramValue, field.getType()));    
+                                    }else{
+                                        errors.put(objName+"."+fieldName,error);
+                                    }    
                                 }
-                                
                             }
                             if (!errors.isEmpty()) {
                                 req.setAttribute("errors", errors);
@@ -200,6 +213,7 @@ public class FrontController extends HttpServlet {
                                 HttpServletRequest wrappedRequest = new HttpServletRequestWrapper(req) {
                                     @Override
                                     public String getMethod() {
+
                                         // Forcer la méthode à "GET"
                                         return "GET";
                                     }
@@ -226,13 +240,46 @@ public class FrontController extends HttpServlet {
                                 }
                             }
                             else{
-                                String paramValue = req.getParameter(paramName);
-                                parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                                if(param.getType().isArray() && param.getType().getComponentType().equals(String.class)){
+                                    String[] paramValue = req.getParameterValues(paramName);    
+                                    parameterValues[i] = paramValue;
+                                }else{
+                                    String paramValue = req.getParameter(paramName);    
+                                    parameterValues[i] = Util.convertParameterValue(paramValue, param.getType());
+                                }
                             }
                         }
                     }
                     result = m.invoke(instance, parameterValues);
                 }
+                if (m.isAnnotationPresent(CsvExport.class)) {
+                    CsvExport csvExport = m.getAnnotation(CsvExport.class);
+                    String[] fields = csvExport.fields();
+                    String fileName = csvExport.fileName();
+                    if (result instanceof List<?>) {
+                        List<?> list = (List<?>) result;
+                        if (!list.isEmpty()) {
+                            Object firstObject = list.get(0);
+                            Class<?> objectClass = firstObject.getClass();
+
+                            if (fields == null || fields.length == 0) {
+                                Field[] declaredFields = objectClass.getDeclaredFields();
+                                fields = new String[declaredFields.length];
+                                for (int i = 0; i < declaredFields.length; i++) {
+                                    fields[i] = declaredFields[i].getName();
+                                }
+                            }
+
+                            Util.generateCsvResponse(list, fields, fileName, res);
+                            return;
+                        }
+                    }
+
+                    res.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                            "CSV export requires a non-empty List result.");
+                    return;
+                }
+                
 
                 if (m.isAnnotationPresent(Restapi.class)) {
                     if (result instanceof ModelView) {
@@ -253,9 +300,12 @@ public class FrontController extends HttpServlet {
                         ModelView mv = (ModelView) result;
                         if (mv.getRedirect() != null) {
                             String redirectUrl = mv.getRedirect();
-                            if (mv.getRedirectMethod().equals("POST")) {
-                                req.getRequestDispatcher("/"+redirectUrl).forward(req,res);
-                            }
+
+                            if(mv.getRedirectMethod()!= null){
+                                if (mv.getRedirectMethod().equals("POST")) {
+                                    req.getRequestDispatcher("/"+redirectUrl).forward(req,res);
+                                }
+                            }   
                             else{
                                 res.sendRedirect("/"+redirectUrl);
                             }
@@ -291,16 +341,12 @@ public class FrontController extends HttpServlet {
 
             } catch (Exception e) {
                 e.printStackTrace();
-                req.setAttribute("error", e.getMessage());
-                RequestDispatcher dispatch = req.getRequestDispatcher("/error.jsp");
-                dispatch.forward(req, res);
+                res.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,e.getMessage());
             }
         }
 
         if (!urlExists) {
-            res.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            res.setContentType("text/plain");
-            out.println("No method is associated with the URL: " + url);
+            res.sendError(HttpServletResponse.SC_NOT_FOUND,"No method is associated with the URL: " + url);
         }
     }
 }
